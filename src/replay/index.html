@@ -1,0 +1,47 @@
+<!DOCTYPE HTML>
+
+<html>
+
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>SLACjs Test</title>
+
+	<style>
+		#slac-stage canvas {
+			border: 1px solid black;
+			background-color: #eeeeee;
+		}
+	</style>
+</head>
+
+<body>
+
+<h1>SLAC.js <small>(Replaying recorded data)</small></h1>
+<p>Current average error: <span class="landmark-error"></span></p>
+
+<div id="slac-stage">
+	<canvas height="600" width="600" id="slacjs-map"></canvas>
+</div>
+
+<div id="error-plot"></div>
+<p class="landmark-individual-error"></p>
+
+<div id="landmark-info"></div>
+
+<script type="text/javascript" src="data/replay-data-170615-LowBeacon-LoopReverseLoop.js"></script>
+<script type="text/javascript" src="data/environment-data-LowBeacon.js"></script>
+<script type="text/javascript" src="assets/js/browser-polyfill.js"></script>
+<script type="text/javascript" src="vendor/vendor.js"></script>
+<script type="text/javascript" src="assets/js/slacjs-app.js"></script>
+
+<script type="text/javascript">
+
+$(window).ready(function() {
+
+	SlacApp.initialize();
+	SlacApp.start();
+
+});
+</script>
+</body>
+</html>

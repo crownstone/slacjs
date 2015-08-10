@@ -10,6 +10,13 @@ SLAC is implemented in Javascript using the ECMAScript 6 standard. See [es6featu
 
 This project is part of a Master Thesis in Artificial Intelligence at the [Radboud University](http://www.ru.nl) and an internship at [DoBots](https://dobots.nl/) and [Almende](http://www.almende.com/).
 
+
+## Presentation
+
+A online presentation describing the SLACjs project can be found here:
+
+https://wouterbulten.nl/slacjs-presentation
+
 ## Demo's
 
 The following list of demo's are demo's of the local/browser version of SLACjs and use simulated data.
@@ -17,24 +24,35 @@ The following list of demo's are demo's of the local/browser version of SLACjs a
 * [Full demonstration with simulated data](https://wouterbulten.nl/slacjs)
 * [Landmark initialisation example](https://wouterbulten.nl/slacjs/tests/landmark-init.html)
 
-
 ## Screenshots
 
 Local version of SLACjs running in the browser (with simulated data). Blue path is the ground truth motion of the user. Each grey path is a particle. Black squares are landmarks; red squares their best estimate retrieved from the particle filter.
 
-![Local version of SLACjs](/screenshots/slacjs_local.png?raw=true "Local version of SLACjs.")
+![Local version of SLACjs](/resources/screenshots/slacjs_local.png?raw=true "Local version of SLACjs.")
 
 A new landmark is initialised using a separate particle filter. On each new measurement the filter is updated to end up with a rough estimate of the landmark position. Note that this is range-only SLAM, so no heading information is present in the measurements.
 
-![Initialising a new landmark](/screenshots/slacjs_local_init.png?raw=true "Initialising a new landmark.")
+![Initialising a new landmark](/resources/screenshots/slacjs_local_init.png?raw=true "Initialising a new landmark.")
 
 After initialisation the landmark position is further refined using EKF's.
 
-![Updating landmarks after initialisation](/screenshots/slacjs_local_init2.png?raw=true "Updating landmarks after initialisation.")
+![Updating landmarks after initialisation (1/2)](/resources/screenshots/slacjs_local_init2.png?raw=true "Updating landmarks after initialisation (2/2).")
+![Updating landmarks after initialisation (1/2)](/resources/screenshots/slacjs_local_localisation.png?raw=true "Updating landmarks after initialisation (2/2).")
 
 SLACjs is designed to work on mobile devices utilising the compass and accelerometer data. A first version running on an iPad:
 
-![iPad version of SLACjs](/screenshots/slac-js-1.0.PNG?raw=true "First version of SLACjs running on an iPad.")
+![iPad version of SLACjs](/resources/screenshots/slac-js-1.0.PNG?raw=true "First version of SLACjs running on an iPad.")
+
+The following screenshot shows a replay of live data recorded using the iPad version of SLACjs. All data is real data and is played back in real time (so no simulated movement or beacons). Performance of this particle run, measured in average landmark location error, is 1.87 meters. 'Red blocks' are estimated landmarks, 'black blocks' are their true positions.
+
+![Replay of live data](/resources/screenshots/slacjs_live_lowbroadcast_187.png?raw=true "Replay of live data.")
+
+
+## Overview of algorithm
+
+All steps of the SLACjs algorithm are displayed in the flow chart below. The chart depicts the process of updating the particle filter based on a single observation. In the case of multiple observations, each observations is processed before resampling takes place.
+
+![Flow chart of SLACjs algorithm](/resources/slacjs-algorithm-overview.png?raw=true "Flow chart of SLACjs algorithm.")
 
 
 ## Installation
@@ -42,7 +60,7 @@ SLACjs is designed to work on mobile devices utilising the compass and accelerom
 SLACjs uses *bower* and *gulp* to manage dependencies and build the project; both can be installed using *npm*. Make sure that you have *npm* installed and then run:
 
 1. Install gulp globally (only do this if you do not have gulp installed yet):
-		`npm install --global gulp` 
+		`npm install --global gulp`
 2. Install project dependencies:
 		`npm install`
 3. Install all bower dependencies:
@@ -98,6 +116,18 @@ Individual parts of the project can be built using one of the sub tasks. Run the
 
 `gulp help`
 
+## Configuration
+
+Two configuration files define most of the behaviour of SLACjs. The *build configuration* file is located in:
+
+`<project root>/config.js`
+
+The build config file contains configuration for the all the Gulp tasks.
+
+The *application configuration*, which contains all settings used by the application, can be found in:
+
+`<project root>/src/app/config.js`
+
 ## Libraries & Third-party software
 
 1. *Babeljs:* SLACjs uses ES6 and uses Babel to compile all javascript to ES5 compatible code.
@@ -118,3 +148,27 @@ The following Cordova plugins are used in the mobile version:
 ## Browser/device support
 
 SLACjs utilises the Babel ES6 polyfill to support older browsers and mobile devices.
+
+## Exporting data (iOS)
+
+To use *iTunes File Sharing* to download data files the following needs to be added to the *.plist* file:
+
+	<key>UIFileSharingEnabled</key>
+	<true/>
+
+## Copyright
+
+Copyright (C) 2015 Wouter Bulten
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.

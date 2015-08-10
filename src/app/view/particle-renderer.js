@@ -1,187 +1,145 @@
-class ParticleRenderer {
+import BaseRenderer from './base-renderer';
 
-	constructor(element, padding = 5, factor = 1, xMaxInit = 40, yMaxInit = 40) {
-		this.element = element;
-		this.canvas = document.getElementById(element);
-		this.ctx = this.canvas.getContext('2d');
-
-		this.padding = padding;
-		this.xMax = xMaxInit * factor;
-		this.yMax = yMaxInit * factor;
-		this.factor = factor;
-
-		this.resizeOnNextRender = false;
-
-		//Resize the canvas to improve the quality of the render on retina devices
-		this._resizeCanvas();
-
-		//Scale canvas to always show the full user path
-		this._scaleCanvas();
-	}
+class ParticleRenderer extends BaseRenderer {
 
 	/**
-	 * Render a particle set
-	 * @param  {ParticleSet} particleSet
+	 * Renders data with an auto increasing canvas (by down scaling)
+	 * @param  {String} element canvas element to render to
 	 * @return {ParticleRenderer}
 	 */
-	render(particleSet) {
+	constructor(element, height) {
+		super(element);
 
+		this.offsetX = 0;
+		this.offsetY = 0;
+
+		this.padding = 2;
+		this.scaleFactor = undefined;
+		this.maxScaleFactor = 200;
+
+		this.optimizeForRetina(height);
+	}
+
+	render(particleSet) {
 		this.clearCanvas();
 
-		if (this.resizeOnNextRender) {
-			this._increaseCanvas();
-			this.resizeOnNextRender = false;
-		}
+		const best = particleSet.bestParticle();
+
+		//Compute the offset based on the best particle
+		//This makes sure everything is >0
+		//(use only the best for performance)
+		this.updateOffsets(best.user, best.landmarks);
+
+		//Compute a scale factor based on the new coordinates
+		//of the best user
+		this.updateScaleFactor(best.user, best.landmarks);
 
 		particleSet.particles().forEach((p) => {
-			const resize = this._plotUserTrace(p.user);
 
-			if (resize) {
-				this.resizeOnNextRender = true;
+			if (p === best) {
+				return;
+			}
+
+			this.plotUserTrace(p.user, '#CCCCCC', 0.5);
+		});
+
+		//Plot the initalisation sets for each landmark
+		this.plotLandmarkInitSet(particleSet.landmarkInitSet);
+
+		//Plot the best user trace
+		this.plotUserTrace(best.user, '#24780D');
+
+		//Plot the landmarks of the best particle
+		best.landmarks.forEach((landmark) => {
+			this.plotObject(landmark, '#B52B2B', 10);
+		});
+	}
+
+	/**
+	 * Calculate the new maximum scale factor
+	 * @param  {Object} user
+	 * @param  {Object} landmark
+	 * @return {void}
+	 */
+	updateOffsets(user, landmarks) {
+		const valuesX = [];
+		const valuesY = [];
+
+		user.trace.values().forEach(({x, y, theta}) => {
+			valuesX.push(x);
+			valuesY.push(y);
+		});
+
+		landmarks.forEach((l) => {
+			valuesX.push(l.x);
+			valuesY.push(l.y);
+		});
+
+		const minX = Math.min(...valuesX);
+		const minY = Math.min(...valuesY);
+
+		if (minX < 0) {
+			this.offsetX = -1 * minX;
+		}
+
+		if (minY < 0) {
+			this.offsetY = -1 * minY;
+		}
+	}
+
+	/**
+	 * Calculate the new maximum scale factor
+	 * @param  {Object} user
+	 * @return {void}
+	 */
+	updateScaleFactor(user, landmarks) {
+
+		let maxX = 0;
+		let maxY = 0;
+
+		user.trace.values().forEach(({x, y, theta}) => {
+			if ((x + this.offsetX) > maxX) {
+				maxX = x + this.offsetX;
+			}
+
+			if ((y + this.offsetY) > maxY) {
+				maxY = y + this.offsetY;
 			}
 		});
 
-		return this;
-	}
-
-	/**
-	 * Plot a user object on the canvas
-	 * @param  {User} user
-	 * @param  {String} color
-	 * @param  {float} Range of the sensor
-	 * @return {Boolean} True if the canvas has to resize
-	 */
-	_plotUserTrace(user, color = '#4B4C54') {
-
-		this.ctx.lineJoin = 'round';
-		this.ctx.lineWidth = 0.1;
-		this.ctx.fillStyle = '#960E0E';
-		this.ctx.strokeStyle = color;
-
-		this.ctx.beginPath();
-
-		let resize = false;
-
-		//@todo Find optimisation to only plot parts that have not yet
-		//been plotted. We cannot use currentValues() as some particles
-		//may have died out while their paths are still present in other particles.
-		user.trace.values().forEach(({x, y, theta}, i) => {
-
-			const tX = this._tx(x);
-			const tY = this._ty(y);
-
-			if (i === 0) {
-				this.ctx.moveTo(tX, tY);
-			}
-			else {
-				this.ctx.lineTo(tX, tY);
+		landmarks.forEach((p) => {
+			if ((p.x + this.offsetX) > maxX) {
+				maxX = p.x + this.offsetX;
 			}
 
-			if (this._isOutOfBounds(x, y)) {
-				resize = true;
+			if ((p.y + this.offsetY) > maxY) {
+				maxY = p.y + this.offsetY;
 			}
 		});
 
-		this.ctx.stroke();
-		this.ctx.closePath();
-
-		return resize;
+		//Calculate a new scalefactor
+		//Never take a higher value as this will result in flickering
+		if (this.scaleFactor === undefined) {
+			this.scaleFactor = Math.min(
+				this.calculateScaleFactor(maxX + (2 * this.padding), maxY + (2 * this.padding)),
+				this.maxScaleFactor
+			);
+		}
+		else {
+			this.scaleFactor = Math.min(
+				this.scaleFactor,
+				this.calculateScaleFactor(maxX + (2 * this.padding), maxY + (2 * this.padding))
+			);
+		}
 	}
 
-	/**
-	 * Checks whether a x,y coordinate is out of bounds
-	 * @param  {Number}  x
-	 * @param  {Number}  y
-	 * @return {Boolean}
-	 */
-	_isOutOfBounds(x, y) {
-
-		const tX = this._tx(x);
-		const tY = this._ty(y);
-
-		return tX < this.padding || tY < this.padding ||
-			tX > (this.xMax - this.padding) || tY > (this.yMax - this.padding);
-	}
-
-	/**
-	 * Resize the canvas for retina devices
-	 * @return {void}
-	 */
-	_resizeCanvas() {
-
-		const cs = window.getComputedStyle(this.canvas);
-		const width = parseInt(cs.getPropertyValue('width'), 10);
-		const height = parseInt(cs.getPropertyValue('height'), 10);
-
-		//Calcuate a factor for the resolution
-		//Use 1.99 scale on retina devices
-		const resolutionFactor = window.devicePixelRatio && window.devicePixelRatio === 2 ? 1.99 : 1;
-
-		//Make the canvas smaller with css
-		this.canvas.width = width * resolutionFactor;
-		this.canvas.height = height * resolutionFactor;
-		this.canvas.style.width = width + 'px';
-		this.canvas.style.height = height + 'px';
-	}
-
-	/**
-	 * Scale the canvas to zoom in
-	 * @return {void}
-	 */
-	_scaleCanvas() {
-
-		const width = this.canvas.width;
-		const height = this.canvas.height;
-
-		//Calculate maximal possible scalefactor
-		const scaleXMax = width / this.xMax;
-		const scaleYMax = height / this.yMax;
-
-		const scaleFactor = Math.min(scaleXMax, scaleYMax);
-
-		//Recalculate the xMax and yMax as the screen is not square
-		this.yMax = this.yMax * (scaleYMax / scaleFactor);
-		this.xMax = this.xMax * (scaleXMax / scaleFactor);
-
-		//Scale the canvas to translate coordinates to pixels
-		this.ctx.scale(scaleFactor, scaleFactor);
-	}
-
-	_increaseCanvas() {
-		const resizeFactor = 0.8;
-
-		this.xMax = this.xMax * (1 / resizeFactor);
-		this.yMax = this.yMax * (1 / resizeFactor);
-
-		this.ctx.scale(resizeFactor, resizeFactor);
-	}
-
-	/**
-	 * Clear the canvas
-	 * @return {ParticleRenderer}
-	 */
-	clearCanvas() {
-
-		//Save transformation matrix
-		this.ctx.save();
-
-		//Reset the transform to clear the whole canvas
-		this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-		//Restore transformation
-		this.ctx.restore();
-
-		return this;
-	}
-
-	/**
+    /**
 	 * Translate x
 	 * @param  {Number} x
 	 * @return {Number}
 	 */
-	_tx(x) {
-		return (x * this.factor) + (this.xMax / 2);
+	tx(x) {
+		return (x + this.offsetX + this.padding) * this.scaleFactor;
 	}
 
 	/**
@@ -189,8 +147,8 @@ class ParticleRenderer {
 	 * @param  {Number} y
 	 * @return {Number}
 	 */
-	_ty(y) {
-		return this.yMax - ((y * this.factor) + (this.yMax / 2));
+	ty(y) {
+		return this.canvas.height - ((y + this.offsetY + this.padding) * this.scaleFactor);
 	}
 }
 

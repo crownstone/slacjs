@@ -11,7 +11,7 @@ export class SimulatedLandmarkSet {
 	 * @param  {Object} landmarkConfig Landmark config
 	 * @return {SimulatedLandmarkSet}
 	 */
-	constructor(N, {xRange, yRange}, updateRate, landmarkConfig) {
+	constructor(N, {xRange, yRange}, updateRate, landmarkConfig, landmarks = {}) {
 		this.landmarks = [];
 		this.xRange = xRange;
 		this.yRange = yRange;
@@ -19,19 +19,28 @@ export class SimulatedLandmarkSet {
 		this.landmarkConfig = landmarkConfig;
 		this.broadcastId = undefined;
 
-		for (let i = 0; i < N; i++) {
-			this.landmarks.push(this._randomLandmark('landmark-' + i));
+		if (landmarks === {}) {
+			for (let i = 0; i < N; i++) {
+				this.landmarks.push(this._randomLandmark('landmark-' + i));
+			}
+		}
+		else {
+			for (let uid in landmarks) {
+				if (landmarks.hasOwnProperty(uid)) {
+					this.landmarks.push(this._landmarkFromCoordinate(uid, landmarks[uid]));
+				}
+			}
 		}
 	}
 
 	/**
 	 * Start broadcasting landmark data
-	 * @param  {Sensor} sensor
+	 * @param  {SlacController} controller
 	 * @param  {User} user
 	 * @return {void}
 	 */
-	startBroadcast(sensor, user) {
-		this.broadcastId = window.setTimeout(() => this._broadCast(sensor, user), this.updateRate);
+	startBroadcast(controller, user) {
+		this.broadcastId = window.setTimeout(() => this._broadCast(controller, user), this.updateRate);
 	}
 
 	/**
@@ -41,6 +50,20 @@ export class SimulatedLandmarkSet {
 	stopBroadCast() {
 		if (this.broadcastId !== undefined) {
 			window.clearTimeout(this.broadcastId);
+		}
+	}
+
+	/**
+	 * Simulate N broadcasts
+	 * @param  {[type]} N          [description]
+	 * @param  {[type]} controller [description]
+	 * @param  {[type]} user       [description]
+	 * @return {[type]}            [description]
+	 */
+	simulateBroadcasts(N, controller, user) {
+
+		for (let i = 0; i < N; i++) {
+			this._broadCast(controller, user, false)
 		}
 	}
 
@@ -63,9 +86,10 @@ export class SimulatedLandmarkSet {
 	 */
 	measurementsAtPoint(x, y) {
 		const landmarks = this.landmarksInRange(x, y);
-		const measurements = [];
 
-		return landmarks.forEach((l) => measurements.push({uid: l.uid, rssi: l.rssiAt(x, y)}));
+		return landmarks.map((l) => {
+			return {uid: l.uid, rssi: l.rssiAt(x, y), name: l.name};
+		});
 	}
 
 	/**
@@ -80,7 +104,7 @@ export class SimulatedLandmarkSet {
 		if (landmarks.length > 0) {
 			const landmark = landmarks[Math.floor(Math.random() * landmarks.length)];
 
-			return {uid: landmark.uid, rssi: landmark.rssiAt(x, y)};
+			return {uid: landmark.uid, rssi: landmark.rssiAt(x, y), name: landmark.name, address: landmark.address};
 		}
 	}
 
@@ -101,8 +125,21 @@ export class SimulatedLandmarkSet {
 	 */
 	_randomLandmark(uid) {
 		return new Landmark(uid, {
-			x: Math.random() * (2 * this.xRange) - this.xRange,
-			y: Math.random() * (2 * this.yRange) - this.yRange
+			x: Math.random() * this.xRange,
+			y: Math.random() * this.yRange
+		}, this.landmarkConfig);
+	}
+
+	/**
+	 * Create a landmark from a set of coordinates
+	 * @param  {string} uid Uid of landmark
+	 * @param  {Object} c   Coordinates
+	 * @return {Landmark}
+	 */
+	_landmarkFromCoordinate(uid, c) {
+		return new Landmark(uid, {
+			x: c.x,
+			y: c.y
 		}, this.landmarkConfig);
 	}
 
@@ -110,19 +147,23 @@ export class SimulatedLandmarkSet {
 	 * Simulate a broadcast
 	 *
 	 * Sets a timeout to run this function again after a fixed amount of time
-	 * @param  {Sensor} sensor
+	 * @param  {SlacController} controller
 	 * @param  {User} user
 	 * @return {void}
 	 */
-	_broadCast(sensor, user) {
+	_broadCast(controller, user, restart = true) {
 
-		const measurement = this.randomMeasurementAtPoint(user.x, user.y);
+		const measurements = this.measurementsAtPoint(user.x, user.y);
 
-		if (measurement !== undefined) {
-			sensor.addObservation(measurement);
+		measurements.forEach((m) => {
+			if (m !== undefined) {
+				controller.addDeviceObservation(m.uid, m.rssi, m.name);
+			}
+		});
+
+		if (restart) {
+			this.broadcastId = window.setTimeout(() => this._broadCast(controller, user), this.updateRate);
 		}
-
-		this.broadcastId = window.setTimeout(() => this._broadCast(sensor, user), this.updateRate);
 	}
 
 	/**
@@ -138,6 +179,8 @@ export class SimulatedLandmarkSet {
 		}
 	}
 }
+
+export default SimulatedLandmarkSet;
 
 class Landmark {
 	/**
@@ -159,6 +202,8 @@ class Landmark {
 		this.n = n;
 		this.txPower = txPower;
 		this.noise = noise;
+		this.name = uid;
+		this.address = 'addr:' + uid;
 	}
 
 	/**
@@ -201,6 +246,8 @@ class Landmark {
 		return this.rssiAtRaw(x, y) + randn(0, this.noise);
 	}
 }
+
+export default Landmark;
 
 /**
  * Convert RSSI to distance

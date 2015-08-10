@@ -1,22 +1,20 @@
 import User from './user';
-import { randn } from '../util/math';
+import { randn, pdfn } from '../util/math';
 
 class Particle {
 	/**
 	 * Create a new particle
-	 * @param  {float} options.x     Initial x position of user
-	 * @param  {float} options.y     Initial y position of user
-	 * @param  {float} options.theta Initial theta of user
+	 * @param  {object} userConfig
 	 * @return {Particle}
 	 */
-	constructor({x, y, theta}, parent = undefined) {
+	constructor(userConfig, parent = undefined) {
 
 		if (parent !== undefined) {
 			this.user = User.copyUser(parent.user);
 			this.landmarks = this._copyMap(parent.landmarks);
 		}
 		else {
-			this.user = new User({x, y, theta});
+			this.user = new User(userConfig.defaultPose, userConfig);
 			this.landmarks = new Map();
 		}
 
@@ -31,11 +29,7 @@ class Particle {
 	samplePose(control) {
 
 		//Sample a pose from the 'control'
-		//@todo Improve pose sampling
-		const r = Math.abs(randn(control.r, 0.3));
-		const theta = randn(control.theta, 0.05 * Math.PI);
-
-		this.user.move({r, theta});
+		this.user.samplePose(control);
 
 		return this;
 	}
@@ -54,21 +48,31 @@ class Particle {
 	 * Register a new landmark
 	 * @param {string} options.uid
 	 * @param {float} options.r
-	 * @param {[type]} options.x 	Initial x position
-	 * @param {[type]} options.y    Initial y
-	 * @param {[type]} options.varX Cov in X direction
-	 * @param {[type]} options.varY Cov in Y direction
+	 * @param {String} options.name
+	 * @param {Number} options.x 	Initial x position
+	 * @param {Number} options.y    Initial y
+	 * @param {Number} options.varX Cov in X direction
+	 * @param {Number} options.varY Cov in Y direction
 	 */
-	addLandmark({uid, r}, {x, y}, {varX, varY} = {varX: 1, varY: 1}) {
+	addLandmark({uid, r, name}, {x, y}, {varX, varY} = {varX: 1, varY: 1}) {
 
-		//@todo find better values for initial covariance
 		const landmark = {
 			x: x,
 			y: y,
+			name: name,
 			cov: [[varX, 0], [0, varY]]
 		};
 
 		this.landmarks.set(uid, landmark);
+	}
+
+	/**
+	 * Remove a landmark from this particle
+	 * @param  {String} uid landmark uid
+	 * @return {void}
+	 */
+	removeLandmark(uid) {
+		this.landmarks.delete(uid);
 	}
 
 	/**
@@ -123,7 +127,8 @@ class Particle {
 						[l.cov[1][0] - updateCov[1][0], l.cov[1][1] - updateCov[1][1]]];
 
 		//Update the weight of the particle
-		this.weight = this.weight - (v * (1.0 / covV) * v);
+		//this.weight = this.weight - (v * (1.0 / covV) * v);
+		this.weight = this.weight * pdfn(r, dist, covV);
 
 		//Update particle
 		l.x = newX;
@@ -156,6 +161,7 @@ class Particle {
 
 		copy.x = landmark.x;
 		copy.y = landmark.y;
+		copy.name = landmark.name;
 		copy.cov = [...landmark.cov];
 
 		return copy;

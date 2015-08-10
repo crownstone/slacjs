@@ -7,20 +7,7 @@
 	<title>SLACjs Test</title>
 
 	<style>
-		* { margin:0; padding:0; } /* to remove the top and left whitespace */
-
-		html, body { width:100%; height:100%; } /* just to be sure these are full screen*/
-
-		canvas { display:block; } /* To remove the scrollbars */
-
-		#slac-stage {
-			width: 100%;
-			position: relative;
-			
-		}
-		#slac-stage canvas { 
-			z-index: -1;
-			position: absolute;
+		#slac-stage canvas {
 			border: 1px solid black;
 			background-color: #eeeeee;
 			box-sizing:border-box;
@@ -32,80 +19,106 @@
 
 <body>
 
-<div id="slac-stage">
-	<canvas id="slac-map"></canvas>
-</div>
 
 <h1>SLAC.js <small>(ES6 Version)</small></h1>
-<button id="toggle-simulation">Toggle simulation</button>
-<button id="step">Step</button>
-Iteration time:
-<select id="time">
-	<option>5000</option>
-	<option>2000</option>
-	<option>1000</option>
-	<option>500</option>
-	<option selected>250</option>
-	<option>50</option>
-	<option>10</option>
-</select>
-Landmark update rate
-<select id="l-time">
-	<option>5000</option>
-	<option>2000</option>
-	<option>1000</option>
-	<option>500</option>
-	<option selected>50</option>
-	<option>10</option>
-</select>
+<p>Current average error: <span class="landmark-error"></span></p>
+
+<div id="slac-stage">
+	<canvas id="slacjs-map" height="600" width="600"></canvas>
+</div>
+
+<p class="landmark-individual-error"></p>
+<p class="error-output"><p>
 
 <script type="text/javascript" src="assets/js/browser-polyfill.js"></script>
 <script type="text/javascript" src="vendor/vendor.js"></script>
 <script type="text/javascript" src="assets/js/slacjs-app.js"></script>
 
 <script type="text/javascript">
-SlacApp.initialize();
+var maxSimulations = 100;
+var currentSimulation = 0;
+var errors = [];
 
-var timeout = undefined;
+var timeBetweenSimulations = 1000;
 
-var iteration = function() {
-	SlacApp.step();
-	timeout = setTimeout(iteration, $('#time').val());
-};
+var errorsPerLandmark = {};
 
-timeout = setTimeout(iteration, 500);
+var step = function() {
+	var success = SlacApp.step();
 
-$(window).ready(function() {
-	
-	$('#step').on('click', function() {
-		SlacApp.step();
-	});
+	if (!success) {
+		SlacApp.reset();
+		errors.push(SlacApp.error);
 
-	$('#l-time').change(function() {
-		SlacApp.landmarks.setUpdateRate($('#l-time').val());
-	});
+		parseErrors(SlacApp.error);
 
-	$('#toggle-simulation').on('click', function() {
-
-		if(timeout !== undefined) {
-			clearTimeout(timeout);
-			timeout = undefined;
-
-			//Disable the simulated broadcast
-			SlacApp.landmarks.stopBroadCast();
-
-			console.log("Paused");
+		startSimulation();
+	}
+	else {
+		if (timeBetweenSimulations > 0) {
+			setTimeout(step, timeBetweenSimulations);
 		}
 		else {
-			timeout = setTimeout(iteration, 500);
-
-			//Enable the broadcast again
-			SlacApp.landmarks.startBroadcast(SlacApp.sensor, SlacApp.user);
-
-			console.log("Started");
+			step();
 		}
-	});
-})
+	}
+}
+
+function parseErrors(error) {
+	for (var key in error) {
+		if (error.hasOwnProperty(key)) {
+			if (errorsPerLandmark[key] === undefined) {
+				errorsPerLandmark[key] = [error[key]];
+			}
+			else {
+				errorsPerLandmark[key].push(error[key]);
+			}
+		}
+	}
+}
+
+function printErrors() {
+	var totalOutput = '';
+
+	for(var key in errorsPerLandmark) {
+		if(errorsPerLandmark.hasOwnProperty(key)) {
+
+			var output = 'error' + key + ' = np.array([';
+
+			errorsPerLandmark[key].forEach(function(e, i) {
+
+				if(i == (errorsPerLandmark[key].length - 1)) {
+					output += e;
+				}
+				else {
+					output += e + ', '
+				}
+			});
+			output += ']);<br>';
+
+			totalOutput += output;
+		}
+	}
+
+	$('.error-output').html(totalOutput);
+}
+
+function startSimulation() {
+	currentSimulation++;
+
+	if(currentSimulation > maxSimulations) {
+		console.log(JSON.stringify(errors));
+		printErrors();
+		return;
+	}
+
+	SlacApp.initialize();
+
+	setTimeout(step, 20);
+}
+
+startSimulation();
+
 </script>
 </body>
 </html>

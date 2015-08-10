@@ -1,9 +1,12 @@
+import KalmanFilter from '../util/kalman';
+
 /**
  * Accelerometer based pedometer
  *
  * Based on a FirefoxOS ES5 implementation.
  *
  * @see http://sebastien.menigot.free.fr/index.php?view=article&id=93
+ * @see http://www.analog.com/library/analogdialogue/archives/44-06/pedometer.html
  */
 class Pedometer {
 
@@ -17,7 +20,7 @@ class Pedometer {
 		this.minAcc   = 1.0;  // minimum of the acceleration on the window L
 		this.maxAcc   = -Infinity; // maximum of the acceleration on the window L
 		this.threshold = -Infinity; // threshold to detect a step
-		this.sensibility = 1.0 / 30.0;  // sensibility to detect a step
+		this.sensitivity = 1.0 / 30.0;  // sensitivity to detect a step
 
 		this.stepCount = 0;           // number of steps
 		this.stepArr   = new Array(windowSize); // steps in 2 seconds
@@ -25,6 +28,9 @@ class Pedometer {
 		this.updateRate = updateRate; //Update rate in ms
 
 		this.filter = new KalmanFilter();
+
+		//Callback to run after a new step
+		this.callbackOnStep = undefined;
 	}
 
 	/**
@@ -45,6 +51,15 @@ class Pedometer {
 	}
 
 	/**
+	 * Register a callback function to run on a new step
+	 * @param  {Function} callback
+	 * @return {void}
+	 */
+	onStep(callback) {
+		this.callbackOnStep = callback;
+	}
+
+	/**
 	 * Detect whether the user has done a step
 	 * @return {void}
 	 */
@@ -60,8 +75,8 @@ class Pedometer {
 
 		if (
 
-			//Sensiblity, the difference must increase the sensibility
-			Math.abs(diff) >= this.sensibility &&
+			//Sensiblity, the difference must increase the sensitivity
+			Math.abs(diff) >= this.sensitivity &&
 
 			//Acceleration must be above the threshold, and the previous one below (i.e. a new step)
 			(this.accNorm[this.accNorm.length - 1] >= this.threshold) &&
@@ -72,6 +87,10 @@ class Pedometer {
 			this.stepCount++;
 			this.stepArr.push(1);
 			this.stepArr.shift();
+
+			if (this.callbackOnStep !== undefined) {
+				this.callbackOnStep();
+			}
 		}
 		else {
 			this.stepArr.push(0);
@@ -113,62 +132,13 @@ class Pedometer {
 		}
 
 		if (!isNaN(this.varAcc)) {
-			this.filter.setSignalVariance(this.varAcc);
-			this.sensibility = 2.0 * (Math.sqrt(this.varAcc) / (9.80665 * 9.80665));
+			this.filter.setMeasurementNoise(this.varAcc);
+			this.sensitivity = 2.0 * (Math.sqrt(this.varAcc) / (9.80665 * 9.80665));
 		}
 		else {
-			this.sensibility = 1.0 / 30.0;
+			this.sensitivity = 1.0 / 30.0;
 		}
 	}
 }
 
 export default Pedometer;
-
-/**
- * Kalman filter for pedometer
- * @see http://sebastien.menigot.free.fr/index.php?view=article&id=93
- */
-class KalmanFilter {
-
-	constructor() {
-		this.G  = 1; // filter gain
-		this.Rw = 1; // noise power desirable
-		this.Rv = 10; // noise power estimated
-
-		this.A = 1;
-		this.C = 1;
-		this.B = 0;
-		this.u = 0;
-		this.P = NaN;
-		this.x = NaN; // estimated signal without noise
-		this.y = NaN; //measured
-	}
-
-	filter(measurement) {
-		this.y = measurement;
-
-		if (isNaN(this.x)) {
-			this.x = (1 / this.C) * this.y;
-			this.P = (1 / this.C) * this.Rv * (1 / this.C);
-		}
-		else {
-
-			// Kalman Filter: Prediction and covariance P
-			this.x = (this.A * this.x) + (this.B * this.u);
-			this.P = ((this.A * this.P) * this.A) + this.Rw;
-
-			// Gain
-			this.G = this.P * this.C * (1 / ((this.C * this.P * this.C) + this.Rv));
-
-			// Correction
-			this.x = this.x + this.G * (this.y - (this.C * this.x));
-			this.P = this.P - (this.G * this.C * this.P);
-		}
-
-		return this.x;
-	}
-
-	setSignalVariance(variance) {
-		this.Rv = variance;
-	}
-}

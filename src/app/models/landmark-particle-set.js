@@ -1,6 +1,6 @@
 import { randn, pdfn, variance } from '../util/math';
 import { lowVarianceSampling, numberOfEffectiveParticles, normalizeWeights } from '../util/sampling';
-import { polarToCartesian } from '../util/coordinate-system';
+import { polarToCartesian } from '../util/motion';
 
 class LandmarkParticleSet {
 	/**
@@ -9,13 +9,15 @@ class LandmarkParticleSet {
 	 * @param  {Number} stdRange                   SD of range measurements
 	 * @param  {Number} randomParticles            Number of random particles to use each update
 	 * @param  {Number} effectiveParticleThreshold Threshold for resampling
+	 * @param  {Number} maxVariance				   The maximum variance before a landmark estimate is returned
 	 * @return {LandmarkParticleSet}
 	 */
-	constructor(nParticles, stdRange, randomParticles, effectiveParticleThreshold) {
+	constructor(nParticles, stdRange, randomParticles, effectiveParticleThreshold, maxVariance) {
 		this.nParticles = nParticles;
 		this.stdRange = stdRange;
 		this.effectiveParticleThreshold = effectiveParticleThreshold;
 		this.randomParticles = randomParticles;
+		this.maxVariance = maxVariance;
 
 		this.measurements = 0;
 		this.particles = [];
@@ -70,7 +72,7 @@ class LandmarkParticleSet {
 		const {varX, varY} = this._particleVariance();
 
 		//@todo Make this constraint configurable
-		if (varX < 8 && varY < 8) {
+		if (varX < this.maxVariance && varY < this.maxVariance) {
 
 			//Compute a weighted average of the particles
 			const {x, y} = this.averagePosition();
@@ -137,8 +139,8 @@ class LandmarkParticleSet {
 
 		return lowVarianceSampling(nSamples, weights).map((i) => {
 			return {
-				x: this.particles[i].x,
-				y: this.particles[i].y,
+				x: randn(this.particles[i].x, this.stdRange / 4),
+				y: randn(this.particles[i].y, this.stdRange / 4),
 				weight: 1
 			};
 		});

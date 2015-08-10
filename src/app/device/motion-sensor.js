@@ -1,13 +1,16 @@
+import { clockwiseToCounterClockwise } from '../util/motion';
+
 class MotionSensor {
 
 	/**
 	 * Motion sensor
+	 * @param {Number} frequency Update rate of sensor
 	 * @param {Boolean} enableCompassUpdate Set to true to be notified of compass updates
 	 * @param {Boolean} enableAccUpdate Set to true to be notified of accelerometer updates
-	 * @param {Number} frequency Update rate of sensor
+	 * @param {Boolean} convertToCw Set to true to convert headings to counter clockwise
 	 * @return {MotionSensor}
 	 */
-	constructor(enableCompassUpdate = false, enableAccUpdate = true, frequency = 100, compassFilter = 2) {
+	constructor(frequency = 100, enableCompassUpdate = false, enableAccUpdate = true, compassFilter = undefined, convertToCw = false) {
 
 		this.accelerometerId = undefined;
 		this.compassId = undefined;
@@ -18,6 +21,7 @@ class MotionSensor {
 
 		this.enableAccUpdate = enableAccUpdate;
 		this.enableCompassUpdate = enableCompassUpdate;
+		this.convertToCw = convertToCw;
 
 		this.x = 0.0;
 		this.y = 0.0;
@@ -41,7 +45,7 @@ class MotionSensor {
 		if (this.compassId === undefined) {
 			this.compassId = navigator.compass.watchHeading(
 				(data) => this._updateCompass(data),
-				(error)	=> console.log(error),
+				(error)	=>this._onError(error),
 				this.compassOptions
 			);
 		}
@@ -78,7 +82,13 @@ class MotionSensor {
 	 * @return {void}
 	 */
 	_updateCompass(heading) {
-		this.heading = heading.magneticHeading;
+
+		if (this.convertToCw) {
+			this.heading = clockwiseToCounterClockwise(heading.magneticHeading);
+		}
+		else {
+			this.heading = heading.magneticHeading;
+		}
 
 		if (this.enableCompassUpdate) {
 			this._changed();

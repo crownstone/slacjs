@@ -5,23 +5,22 @@ import { lowVarianceSampling, numberOfEffectiveParticles, normalizeWeights } fro
 class ParticleSet {
 	/**
 	 * Create a new particle set with a given number of particles
-	 * @param  {int} nParticles    	 Number of particles
-	 * @param  {float} options.x     Initial x postion of user
-	 * @param  {float} options.y     Initial y position of user
-	 * @param  {float} options.theta Initial theta of user
-	 * @return ParticleSet
+	 * @param  {Number} nParticles Number of particles
+	 * @param  {Object} userConfig Config of the user
+	 * @param  {Object} initConfig Config for the init filter
+	 * @return {ParticleSet}
 	 */
-	constructor(nParticles, {x, y, theta}) {
+	constructor(nParticles, effectiveParticleThreshold, userConfig, initConfig) {
 		this.nParticles = nParticles;
-
+		this.effectiveParticleThreshold = effectiveParticleThreshold;
 		this.particleList = [];
 
 		//Internal list to keep track of initialised landmarks
 		this.initialisedLandmarks = [];
-		this.landmarkInitSet = new LandmarkInitializationSet();
+		this.landmarkInitSet = new LandmarkInitializationSet(initConfig);
 
 		for (let i = 0; i < nParticles; i++) {
-			this.particleList.push(new Particle({x, y, theta}));
+			this.particleList.push(new Particle(userConfig));
 		}
 	}
 
@@ -45,7 +44,13 @@ class ParticleSet {
 
 		if (obs !== {}) {
 
-			const { uid, r } = obs;
+			const { uid, r, name, moved } = obs;
+
+			//If the landmark has moved we remove it from all particles
+			if (moved) {
+				console.log('Moving landmark')
+				this._removeLandmark(uid);
+			}
 
 			if (this.initialisedLandmarks.indexOf(uid) == -1) {
 
@@ -58,14 +63,15 @@ class ParticleSet {
 				if (estimate > 0.6) {
 
 					this.particleList.forEach((p) => {
-						p.addLandmark({uid, r}, {x, y}, {varX, varY});
+						p.addLandmark(obs, {x, y}, {varX, varY});
 					});
 
+					this.landmarkInitSet.remove(uid);
 					this.initialisedLandmarks.push(uid);
 				}
 			}
 			else {
-				this.particleList.forEach((p) => p.processObservation({uid, r}));
+				this.particleList.forEach((p) => p.processObservation(obs));
 			}
 		}
 
@@ -81,15 +87,11 @@ class ParticleSet {
 	resample() {
 
 		const weights = this.particleList.map(p => p.weight);
-		if (numberOfEffectiveParticles(weights) < (this.nParticles * 0.5)) {
-
+		if (numberOfEffectiveParticles(weights) < this.effectiveParticleThreshold) {
+			console.log('resampling');
 			this.particleList = lowVarianceSampling(this.nParticles, weights).map((i) => {
 				return new Particle({}, this.particleList[i]);
 			});
-		}
-		else {
-			console.log('Not resampling');
-			console.log(numberOfEffectiveParticles(weights));
 		}
 
 		return this;
@@ -120,6 +122,38 @@ class ParticleSet {
 	}
 
 	/**
+	 * Compute an average of all landmark estimates
+	 * @return {Map}
+	 */
+	landmarkEstimate() {
+		const weights = normalizeWeights(this.particleList.map((p) => p.weight));
+
+		const landmarks = new Map();
+
+		//Loop through all particles to get an estimate of the landmarks
+		this.particleList.forEach((p, i) => {
+			p.landmarks.forEach((landmark, uid) => {
+				if (!landmarks.has(uid)) {
+					landmarks.set(uid, {
+						x: weights[i] * landmark.x,
+						y: weights[i] * landmark.y,
+						uid: uid,
+						name: landmark.name
+					});
+				}
+				else {
+					const l = landmarks.get(uid);
+
+					l.x += weights[i] * landmark.x;
+					l.y += weights[i] * landmark.y;
+				}
+			});
+		});
+
+		return landmarks;
+	}
+
+	/**
 	 * Get the best estimate of the current user position
 	 * @return {object}
 	 */
@@ -130,6 +164,31 @@ class ParticleSet {
 			x: this.particleList.reduce((prev, p, i) => prev + (weights[i] * p.user.x), 0),
 			y: this.particleList.reduce((prev, p, i) => prev + (weights[i] * p.user.y), 0)
 		};
+	}
+
+	/**
+	 * Remove a landmark from all the particles
+	 * @param  {String} uid Landmark uid
+	 * @return {void}
+	 */
+	_removeLandmark(uid) {
+
+		//Remove from the landmark list if it exists
+		const index = this.initialisedLandmarks.indexOf(uid);
+
+		if (index != -1) {
+			this.initialisedLandmarks.splice(index, 1);
+
+			//Remove it from all particles
+			this.particleList.forEach((p) => p.removeLandmark(uid));
+		}
+		else {
+
+			//It is not initalised yet, so we remove it from the init set
+			if (this.landmarkInitSet.has(uid)) {
+				this.landmarkInitSet.remove(uid);
+			}
+		}
 	}
 }
 
